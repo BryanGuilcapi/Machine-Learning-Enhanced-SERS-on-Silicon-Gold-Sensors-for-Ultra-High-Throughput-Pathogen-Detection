@@ -1,0 +1,107 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red167\green9\blue245;\red0\green128\blue19;\red14\green0\blue255;
+}
+{\*\expandedcolortbl;;\csgenericrgb\c65490\c3529\c96078;\csgenericrgb\c0\c50196\c7451;\csgenericrgb\c5490\c0\c100000;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs20 \cf0 close \cf2 all\cf0 ;\
+clc;\
+clear;\
+\
+\cf3 %% Cargar datos\cf0 \
+ramanshift = load(\cf2 'Data_Ramman_shift.mat'\cf0 );\
+silicio    = load(\cf2 'silicio_limpio.mat'\cf0 );\
+oro        = load(\cf2 'gold_limpio_unido.mat'\cf0 );\
+mba        = load(\cf2 'mba_limpio.mat'\cf0 );\
+ecoli      = load(\cf2 "ecoli_limpio.mat"\cf0 );\
+oc         = load(\cf2 "oc_limpio.mat"\cf0 );\
+stx        = load(\cf2 "stx_limpio.mat"\cf0 );\
+\
+\cf3 % Concatenar espectros\cf0 \
+datos = [silicio.silicio_limpio, oro.gold_unido, mba.mba_final,\cf4 ...\cf0 \
+         ecoli.ecoli_final, oc.oc_final, stx.stx_final];\
+\
+\cf3 % Etiquetas por clase\cf0 \
+n_silicio = size(silicio.silicio_limpio, 2);\
+n_oro = size(oro.gold_unido, 2);\
+n_mba = size(mba.mba_final, 2);\
+n_ecoli = size(ecoli.ecoli_final, 2);\
+n_oc = size(oc.oc_final, 2);\
+n_stx = size(stx.stx_final,2);\
+\
+labels = [ones(1, n_silicio), 2*ones(1, n_oro), 3*ones(1, n_mba),\cf4 ...\cf0 \
+          4*ones(1, n_ecoli), 5*ones(1,n_oc), 6*ones(1, n_stx)];\
+\
+\cf3 % Transponer datos (filas = muestras)\cf0 \
+datos_T = datos';\
+\
+\cf3 % Dividir datos ANTES de LDA\cf0 \
+cv = cvpartition(labels, \cf2 'HoldOut'\cf0 , 0.3);  \cf3 % 70% train, 30% test\cf0 \
+XTrain = datos_T(training(cv), :);\
+YTrain = labels(training(cv))';\
+XTest  = datos_T(test(cv), :);\
+YTest  = labels(test(cv))';\
+\
+\cf3 %% Aplicar LDA SOLO al entrenamiento\cf0 \
+ldaModel = fitcdiscr(XTrain, YTrain);\
+\
+\cf3 % Proyectar datos en espacio LDA\cf0 \
+XTrain_LDA = XTrain * ldaModel.Coeffs(1,2).Linear;\
+XTest_LDA  = XTest * ldaModel.Coeffs(1,2).Linear;\
+\
+\cf3 % (Alternativamente, usar transform si est\'e1 disponible)\cf0 \
+\cf3 % XTrain_LDA = transform(ldaModel, XTrain);\cf0 \
+\cf3 % XTest_LDA  = transform(ldaModel, XTest);\cf0 \
+\
+\cf3 %% Visualizaci\'f3n del espacio LDA (1D)\cf0 \
+figure;\
+gscatter(XTrain_LDA, YTrain);\
+xlabel(\cf2 'LDA 1'\cf0 );\
+ylabel(\cf2 'Clase'\cf0 );\
+title(\cf2 'Visualizaci\'f3n del espacio LDA (entrenamiento)'\cf0 );\
+\
+\cf3 %% ENTRENAMIENTO SVM\cf0 \
+svmModel = fitcecoc(XTrain_LDA, YTrain, \cf4 ...\cf0 \
+    \cf2 'Learners'\cf0 , templateSVM(\cf2 'KernelFunction'\cf0 , \cf2 'linear'\cf0 ));\
+\
+\cf3 %% Validaci\'f3n cruzada sobre entrenamiento\cf0 \
+modelo_cv = crossval(svmModel, \cf2 'KFold'\cf0 , 5);\
+error_cv = kfoldLoss(modelo_cv);\
+fprintf(\cf2 'Error de validaci\'f3n cruzada (entrenamiento): %.2f%%\\n'\cf0 , error_cv * 100);\
+\
+\cf3 %% PREDICCI\'d3N Y EVALUACI\'d3N\cf0 \
+YPred = predict(svmModel, XTest_LDA);\
+accuracy = mean(YPred == YTest) * 100;\
+fprintf(\cf2 'Precisi\'f3n del modelo en test: %.2f%%\\n'\cf0 , accuracy);\
+\
+\cf3 %% MATRIZ DE CONFUSI\'d3N\cf0 \
+figure;\
+confusionchart(YTest, YPred, \cf4 ...\cf0 \
+    \cf2 'RowSummary'\cf0 , \cf2 'row-normalized'\cf0 , \cf4 ...\cf0 \
+    \cf2 'ColumnSummary'\cf0 , \cf2 'column-normalized'\cf0 );\
+title(\cf2 'Confusion Matrix  - SVM with LDA'\cf0 );\
+\
+\cf3 %% PLOTEO de datos reales vs predichos\cf0 \
+jitterAmount = 0.025;\
+YTest_jittered = YTest + jitterAmount * randn(size(YTest));\
+YPred_jittered = YPred + jitterAmount * randn(size(YPred));\
+classNames = \{\cf2 'Si'\cf0 , \cf2 'Au'\cf0 , \cf2 '4-MBA'\cf0 , \cf2 'E.coli'\cf0 , \cf2 'OC43'\cf0 , \cf2 'Stx2'\cf0 \};\
+\
+figure;\
+hold \cf2 on\cf0 ;\
+scatter(1:length(YTest), YTest_jittered, 100, \cf2 'bo'\cf0 , \cf2 'MarkerFaceAlpha'\cf0 , 0.3);\
+scatter(1:length(YPred), YPred_jittered, 50, \cf2 'rx'\cf0 , \cf2 'MarkerFaceAlpha'\cf0 , 0.1);\
+xlabel(\cf2 'Sample Index'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+ylabel(\cf2 'Class'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+title(\cf2 'Comparison: Real Data vs Predicted Data'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+legend(\cf2 'Reales'\cf0 , \cf2 'Predichos'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+yticks(1:length(classNames));\
+yticklabels(classNames);\
+axis([-100 3000 0.5 6.5])\
+grid \cf2 on\cf0 ;\
+hold \cf2 off\cf0 ;\
+\
+}

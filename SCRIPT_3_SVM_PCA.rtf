@@ -1,0 +1,180 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red167\green9\blue245;\red0\green128\blue19;\red14\green0\blue255;
+}
+{\*\expandedcolortbl;;\csgenericrgb\c65490\c3529\c96078;\csgenericrgb\c0\c50196\c7451;\csgenericrgb\c5490\c0\c100000;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs20 \cf0 close \cf2 all\cf0 ;\
+clc;\
+clear \cf2 all\cf0 ;\
+\
+\cf3 %% Cargar datos\cf0 \
+ramanshift = load(\cf2 'Data_Ramman_shift.mat'\cf0 );\
+silicio    = load(\cf2 'silicio_limpio.mat'\cf0 );\
+oro        = load(\cf2 'gold_limpio_unido.mat'\cf0 );\
+mba        = load(\cf2 'mba_limpio.mat'\cf0 );\
+ecoli      = load(\cf2 "ecoli_limpio.mat"\cf0 );\
+oc         = load(\cf2 "oc_limpio.mat"\cf0 );\
+stx        = load(\cf2 "stx_limpio.mat"\cf0 );\
+\
+\cf3 % Concatenar las matrices para el an\'e1lisis\cf0 \
+spectra = [silicio.silicio_limpio, oro.gold_unido, mba.mba_final,\cf4 ...\cf0 \
+           ecoli.ecoli_final, oc.oc_final, stx.stx_final];\
+\
+\cf3 % Etiquetas\cf0 \
+labels = [repmat(1, 1, size(silicio.silicio_limpio, 2)), \cf4 ...\cf0 \
+          repmat(2, 1, size(oro.gold_unido, 2)), \cf4 ...\cf0 \
+          repmat(3, 1, size(mba.mba_final, 2)), \cf4 ...\cf0 \
+          repmat(4, 1, size(ecoli.ecoli_final, 2)), \cf4 ...\cf0 \
+          repmat(5, 1, size(oc.oc_final, 2)), \cf4 ...\cf0 \
+          repmat(6, 1, size(stx.stx_final, 2))];\
+\
+\cf3 % Transponer y estandarizar\cf0 \
+spectra_T = spectra';\
+spectra_norm = zscore(spectra_T);\
+\
+\cf3 %% PCA\cf0 \
+[coeff, score, ~, ~, explained] = pca(spectra_norm);\
+num_componentes = 3;\
+spectra_pca = score(:, 1:num_componentes);\
+\
+\cf3 %% Divisi\'f3n de datos\cf0 \
+rng(42); \cf3 % Reproducibilidad\cf0 \
+cv = cvpartition(labels, \cf2 'HoldOut'\cf0 , 0.3);\
+\
+X_train = spectra_pca(training(cv), :);\
+X_test  = spectra_pca(test(cv), :);\
+y_train = labels(training(cv));\
+y_test  = labels(test(cv));\
+\
+\cf3 %% Entrenamiento con SVM (ECOC)\cf0 \
+svm_template = templateSVM(\cf2 'KernelFunction'\cf0 , \cf2 'linear'\cf0 , \cf2 'Standardize'\cf0 , true);\
+modelo_svm = fitcecoc(X_train, y_train, \cf2 'Learners'\cf0 , svm_template, \cf2 'Coding'\cf0 , \cf2 'onevsall'\cf0 );\
+\
+modelo_cv = crossval(modelo_svm, \cf2 'KFold'\cf0 , 2);\
+error_cv = kfoldLoss(modelo_cv);\
+fprintf(\cf2 'Error de validaci\'f3n cruzada: %.2f%%\\n'\cf0 , error_cv * 100);\
+\
+\cf3 %% Evaluaci\'f3n en datos de prueba\cf0 \
+y_pred = predict(modelo_svm, X_test);\
+precision_total = sum(y_pred == y_test) / length(y_test) * 100;\
+fprintf(\cf2 'Precisi\'f3n en datos de prueba: %.2f%%\\n'\cf0 , precision_total);\
+\
+\cf3 %% M\'e9tricas por clase\cf0 \
+conf_mat = confusionmat(y_test, y_pred);\
+num_clases = size(conf_mat, 1);\
+precision_clase = zeros(1, num_clases);\
+recall_clase = zeros(1, num_clases);\
+f1_clase = zeros(1, num_clases);\
+\
+\cf4 for \cf0 i = 1:num_clases\
+    TP = conf_mat(i,i);\
+    FP = sum(conf_mat(:,i)) - TP;\
+    FN = sum(conf_mat(i,:)) - TP;\
+    precision_clase(i) = TP / (TP + FP + eps);\
+    recall_clase(i) = TP / (TP + FN + eps);\
+    f1_clase(i) = 2 * (precision_clase(i) * recall_clase(i)) / (precision_clase(i) + recall_clase(i) + eps);\
+\cf4 end\cf0 \
+\
+fprintf(\cf2 '\\n--- M\'e9tricas por clase ---\\n'\cf0 );\
+\cf4 for \cf0 i = 1:num_clases\
+    fprintf(\cf2 'Clase %d: Precision = %.2f%% | Recall = %.2f%% | F1 = %.2f%%\\n'\cf0 , \cf4 ...\cf0 \
+        i, 100*precision_clase(i), 100*recall_clase(i), 100*f1_clase(i));\
+\cf4 end\cf0 \
+\
+\cf3 %% Matriz de confusi\'f3n\cf0 \
+figure;\
+cm = confusionchart(y_test, y_pred, \cf4 ...\cf0 \
+    \cf2 'RowSummary'\cf0 , \cf2 'row-normalized'\cf0 , \cf4 ...\cf0 \
+    \cf2 'ColumnSummary'\cf0 , \cf2 'column-normalized'\cf0 );\
+title(\cf2 'Confusion Matrix - SVM with ECOC - (PCA)'\cf0 );\
+\
+\cf3 %% Visualizaci\'f3n 2D\cf0 \
+colors = [0.33 0.31 0.31;\
+          0.93 0.69 0.13;\
+          0.6350 0.0780 0.1840;\
+          0.40 0.54 0.23;\
+          0.50 0.00 1.00;\
+          1.00 0.41 0.16];\
+\
+figure;\
+hold \cf2 on\cf0 ;\
+gscatter(X_test(:, 1), X_test(:, 2), y_test, colors, \cf2 'o'\cf0 , 8);\
+gscatter(X_test(:, 1), X_test(:, 2), y_pred, colors, \cf2 'x'\cf0 , 8);\
+legend(\cf2 'Class 1 (Real) Si'\cf0 , \cf2 'Class 2 (Real) Au'\cf0 , \cf2 'Class 3 (Real) 4-MBA'\cf0 ,\cf4 ...\cf0 \
+       \cf2 'Class 4 (Real) Ecoli'\cf0 , \cf2 'Class 5 (Real) OC43'\cf0 , \cf2 'Class 6 (Real) Stx2'\cf0 ,\cf4 ...\cf0 \
+       \cf2 'Class 1 (Pred)'\cf0 , \cf2 'Class 2 (Pred)'\cf0 , \cf2 'Class 3 (Pred)'\cf0 ,\cf4 ...\cf0 \
+       \cf2 'Class 4 (Pred)'\cf0 , \cf2 'Class 5 (Pred)'\cf0 , \cf2 'Class 6 (Pred)'\cf0 ,\cf4 ...\cf0 \
+       \cf2 'Location'\cf0 , \cf2 'bestoutside'\cf0 );\
+title(\cf2 'SVM (ECOC) Classification in PCA space'\cf0 );\
+xlabel(\cf2 'PC1'\cf0 ); ylabel(\cf2 'PC2'\cf0 );\
+grid \cf2 on\cf0 ; hold \cf2 off\cf0 ;\
+\
+\cf3 %% Visualizaci\'f3n 3D\cf0 \
+figure;\
+scatter3(X_test(:,1), X_test(:,2), X_test(:,3), 60, y_pred, \cf2 'filled'\cf0 );\
+title(\cf2 'SVM predictions in 3D PCA space'\cf0 );\
+xlabel(\cf2 'PC1'\cf0 ); ylabel(\cf2 'PC2'\cf0 ); zlabel(\cf2 'PC3'\cf0 );\
+grid \cf2 on\cf0 ;\
+\
+\cf3 %% Jitter Plot\cf0 \
+jitter_amount = 0.02;\
+X_test_jitter = X_test + jitter_amount * randn(size(X_test));\
+\
+figure;\
+subplot(1,2,1);\
+hold \cf2 on\cf0 ;\
+title(\cf2 'Real Data with Jitter'\cf0 );\
+gscatter(X_test_jitter(:, 1), X_test_jitter(:, 2), y_test, colors, \cf2 'o'\cf0 , 8);\
+xlabel(\cf2 'PC1'\cf0 ); ylabel(\cf2 'PC2'\cf0 ); grid \cf2 on\cf0 ;\
+legend(\{\cf2 'Si'\cf0 , \cf2 'Au'\cf0 ,\cf2 '4-MBA'\cf0 , \cf2 'E.coli'\cf0 , \cf2 'OC43'\cf0 , \cf2 'Stx2'\cf0 \}, \cf2 'Location'\cf0 , \cf2 'best'\cf0 );\
+hold \cf2 off\cf0 ;\
+\
+subplot(1,2,2);\
+hold \cf2 on\cf0 ;\
+title(\cf2 'Model Prediction with Jitter'\cf0 );\
+gscatter(X_test_jitter(:, 1), X_test_jitter(:, 2), y_pred, colors, \cf2 'x'\cf0 , 8);\
+xlabel(\cf2 'PC1'\cf0 ); ylabel(\cf2 'PC2'\cf0 ); grid \cf2 on\cf0 ;\
+legend(\{\cf2 'Si'\cf0 , \cf2 'Au'\cf0 ,\cf2 '4-MBA'\cf0 , \cf2 'E.coli'\cf0 , \cf2 'OC43'\cf0 , \cf2 'Stx2'\cf0 \}, \cf2 'Location'\cf0 , \cf2 'best'\cf0 );\
+hold \cf2 off\cf0 ;\
+\
+\cf3 %% Errores de clasificaci\'f3n\cf0 \
+\cf3 %% Errores de clasificaci\'f3n\cf0 \
+figure;\
+hold \cf2 on\cf0 ;\
+\
+\cf3 % Verifica tama\'f1os primero\cf0 \
+\cf4 if \cf0 length(y_pred) ~= size(X_test,1)\
+    error(\cf2 'y_pred y X_test tienen tama\'f1os diferentes.'\cf0 );\
+\cf4 end\cf0 \
+\
+\cf3 % Encuentra \'edndices de error relativos a X_test\cf0 \
+error_indices = find(y_pred ~= y_test);\
+\
+\cf3 % Verifica que no haya \'edndices fuera de rango\cf0 \
+error_indices = error_indices(error_indices <= size(X_test,1));\
+\
+\cf4 if \cf0 ~isempty(error_indices)\
+    scatter(X_test(error_indices, 1), X_test(error_indices, 2), 80, \cf2 'r'\cf0 , \cf2 'x'\cf0 );\
+    legend(\cf2 'Errores'\cf0 );\
+\cf4 else\cf0 \
+    disp(\cf2 'No se encontraron errores de clasificaci\'f3n'\cf0 );\
+\cf4 end\cf0 \
+\
+xlabel(\cf2 'PC1'\cf0 ); ylabel(\cf2 'PC2'\cf0 );\
+title(\cf2 'Distribuci\'f3n de errores de clasificaci\'f3n'\cf0 );\
+grid \cf2 on\cf0 ;\
+hold \cf2 off\cf0 ;\
+\
+\
+\cf3 %% Resumen final\cf0 \
+fprintf(\cf2 '\\n--- Resumen Final ---\\n'\cf0 );\
+fprintf(\cf2 'Precisi\'f3n total: %.2f%%\\n'\cf0 , precision_total);\
+fprintf(\cf2 'Error validaci\'f3n cruzada: %.2f%%\\n'\cf0 , error_cv * 100);\
+fprintf(\cf2 'Total muestras de prueba: %d\\n'\cf0 , length(y_test));\
+fprintf(\cf2 'Errores de clasificaci\'f3n: %d\\n'\cf0 , sum(y_pred ~= y_test));\
+\
+}
