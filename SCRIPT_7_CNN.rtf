@@ -1,0 +1,157 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red167\green9\blue245;\red0\green128\blue19;\red14\green0\blue255;
+}
+{\*\expandedcolortbl;;\csgenericrgb\c65490\c3529\c96078;\csgenericrgb\c0\c50196\c7451;\csgenericrgb\c5490\c0\c100000;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs20 \cf0 clc;\
+clear \cf2 all\cf0 ;\
+close \cf2 all\cf0 ;\
+\
+\cf3 %% ===================== Cargar datos =====================\cf0 \
+ramanshift = load(\cf2 'Data_Ramman_shift.mat'\cf0 );\
+silicio    = load(\cf2 'silicio_limpio.mat'\cf0 );\
+oro        = load(\cf2 'gold_limpio_unido.mat'\cf0 );\
+mba        = load(\cf2 'mba_limpio.mat'\cf0 );\
+ecoli      = load(\cf2 "ecoli_limpio.mat"\cf0 );\
+oc         = load(\cf2 "oc_limpio.mat"\cf0 );\
+stx        = load(\cf2 "stx_limpio.mat"\cf0 );\
+\
+datos = [silicio.silicio_limpio, \cf4 ...\cf0 \
+         oro.gold_unido, \cf4 ...\cf0 \
+         mba.mba_final, \cf4 ...\cf0 \
+         ecoli.ecoli_final, \cf4 ...\cf0 \
+         oc.oc_final, \cf4 ...\cf0 \
+         stx.stx_final];\
+\
+\cf3 % Etiquetas num\'e9ricas\cf0 \
+y_numerico = [ones(1, size(silicio.silicio_limpio,2)), \cf4 ...\cf0 \
+              2*ones(1, size(oro.gold_unido,2)), \cf4 ...\cf0 \
+              3*ones(1, size(mba.mba_final,2)), \cf4 ...\cf0 \
+              4*ones(1, size(ecoli.ecoli_final,2)), \cf4 ...\cf0 \
+              5*ones(1, size(oc.oc_final,2)), \cf4 ...\cf0 \
+              6*ones(1, size(stx.stx_final,2))]';\
+\
+\cf3 % Definir nombres de clases\cf0 \
+clases = [\cf2 "Si"\cf0 , \cf2 "Au-NPs"\cf0 , \cf2 "4-MBA"\cf0 , \cf2 "E.coli"\cf0 , \cf2 "OC43"\cf0 , \cf2 "Stx2"\cf0 ];\
+y = categorical(y_numerico, 1:6, clases);\
+\
+\cf3 %% =================== Divisi\'f3n de datos (PRIMERO) =========================\cf0 \
+cv = cvpartition(y, \cf2 'HoldOut'\cf0 , 0.3);\
+\
+X_train_raw = datos(:, training(cv))';\
+y_train = y(training(cv));\
+\
+X_val_raw   = datos(:, test(cv))';\
+y_val   = y(test(cv));\
+\
+\cf3 %% =================== Normalizaci\'f3n (SIN DATA LEAKAGE) ====================\cf0 \
+\cf3 % Calcular mu y sigma SOLO en training\cf0 \
+[X_train, mu, sigma] = zscore(X_train_raw);\
+\
+\cf3 % Aplicar mu y sigma al validation/test\cf0 \
+X_val = (X_val_raw - mu) ./ sigma;\
+\
+\cf3 % Guardar media y desviaci\'f3n para uso futuro\cf0 \
+media_entrenamiento = mu;\
+std_entrenamiento   = sigma;\
+save(\cf2 'media_std_entrenamiento.mat'\cf0 , \cf2 'media_entrenamiento'\cf0 , \cf2 'std_entrenamiento'\cf0 );\
+\
+\cf3 %% =================== Formato para CNN =====================\cf0 \
+X_train = reshape(X_train', [size(X_train,2), 1, 1, size(X_train,1)]);\
+X_val   = reshape(X_val',   [size(X_val,2),   1, 1, size(X_val,1)]);\
+\
+\cf3 %% =================== Definir y entrenar red =====================\cf0 \
+layers = [\
+    imageInputLayer([size(X_train,1), 1, 1], \cf2 'Name'\cf0 , \cf2 'input'\cf0 )\
+\
+    convolution2dLayer([5 1], 32, \cf2 'Padding'\cf0 , \cf2 'same'\cf0 , \cf2 'Name'\cf0 , \cf2 'conv1'\cf0 )\
+    batchNormalizationLayer(\cf2 'Name'\cf0 ,\cf2 'bn1'\cf0 )\
+    reluLayer(\cf2 'Name'\cf0 ,\cf2 'relu1'\cf0 )\
+    maxPooling2dLayer([2 1], \cf2 'Stride'\cf0 , [2 1], \cf2 'Name'\cf0 ,\cf2 'pool1'\cf0 )\
+\
+    convolution2dLayer([3 1], 64, \cf2 'Padding'\cf0 , \cf2 'same'\cf0 , \cf2 'Name'\cf0 ,\cf2 'conv2'\cf0 )\
+    batchNormalizationLayer(\cf2 'Name'\cf0 ,\cf2 'bn2'\cf0 )\
+    reluLayer(\cf2 'Name'\cf0 ,\cf2 'relu2'\cf0 )\
+    maxPooling2dLayer([2 1], \cf2 'Stride'\cf0 , [2 1], \cf2 'Name'\cf0 ,\cf2 'pool2'\cf0 )\
+\
+    fullyConnectedLayer(128, \cf2 'Name'\cf0 ,\cf2 'fc1'\cf0 )\
+    reluLayer(\cf2 'Name'\cf0 ,\cf2 'relu3'\cf0 )\
+    dropoutLayer(0.3, \cf2 'Name'\cf0 ,\cf2 'dropout'\cf0 )\
+\
+    fullyConnectedLayer(6, \cf2 'Name'\cf0 ,\cf2 'fc2'\cf0 )\
+    softmaxLayer(\cf2 'Name'\cf0 ,\cf2 'softmax'\cf0 )\
+    classificationLayer(\cf2 'Name'\cf0 ,\cf2 'output'\cf0 )\
+];\
+\
+options = trainingOptions(\cf2 'adam'\cf0 , \cf4 ...\cf0 \
+    \cf2 'InitialLearnRate'\cf0 , 1e-4, \cf4 ...\cf0 \
+    \cf2 'MaxEpochs'\cf0 , 50, \cf4 ...\cf0 \
+    \cf2 'MiniBatchSize'\cf0 , 64, \cf4 ...\cf0 \
+    \cf2 'Shuffle'\cf0 , \cf2 'every-epoch'\cf0 , \cf4 ...\cf0 \
+    \cf2 'ValidationData'\cf0 , \{X_val, categorical(y_val)\}, \cf4 ...\cf0 \
+    \cf2 'ValidationFrequency'\cf0 , 30, \cf4 ...\cf0 \
+    \cf2 'Verbose'\cf0 , false, \cf4 ...\cf0 \
+    \cf2 'Plots'\cf0 , \cf2 'training-progress'\cf0 );\
+\
+fprintf(\cf2 "Entrenando red neuronal...\\n"\cf0 );\
+net = trainNetwork(X_train, categorical(y_train), layers, options);\
+\
+\cf3 %% =================== Guardar modelo =============================\cf0 \
+save(\cf2 'modelo_CNN_SERS_3.mat'\cf0 , \cf2 'net'\cf0 , \cf2 'clases'\cf0 , \cf2 'media_entrenamiento'\cf0 , \cf2 'std_entrenamiento'\cf0 );\
+\
+\cf3 %% =================== Evaluar modelo =============================\cf0 \
+y_pred = classify(net, X_val);\
+accuracy = sum(y_pred == y_val) / numel(y_val);\
+fprintf(\cf2 'Precisi\'f3n validaci\'f3n: %.2f%%\\n'\cf0 , accuracy * 100);\
+\
+\cf3 % === Matriz de confusi\'f3n ===\cf0 \
+figure;\
+confusionchart(y_val, y_pred);\
+title(\cf2 'Confusion Matrix - CNN'\cf0 );\
+\
+\cf3 % === M\'e9tricas ===\cf0 \
+classes_unique = categories(y_val);\
+\
+precision = zeros(numel(classes_unique),1);\
+recall    = zeros(numel(classes_unique),1);\
+f1score   = zeros(numel(classes_unique),1);\
+\
+\cf4 for \cf0 i = 1:numel(classes_unique)\
+    tp = sum((y_pred == classes_unique\{i\}) & (y_val == classes_unique\{i\}));\
+    fp = sum((y_pred == classes_unique\{i\}) & (y_val ~= classes_unique\{i\}));\
+    fn = sum((y_pred ~= classes_unique\{i\}) & (y_val == classes_unique\{i\}));\
+\
+    precision(i) = tp / (tp + fp + eps);\
+    recall(i)    = tp / (tp + fn + eps);\
+    f1score(i)   = 2 * (precision(i) * recall(i)) / (precision(i) + recall(i) + eps);\
+\cf4 end\cf0 \
+\
+T = table(classes_unique, precision, recall, f1score, \cf4 ...\cf0 \
+    \cf2 'VariableNames'\cf0 , \{\cf2 'Clase'\cf0 , \cf2 'Precision'\cf0 , \cf2 'Recall'\cf0 , \cf2 'F1Score'\cf0 \});\
+disp(T);\
+\
+\cf3 %% =================== Visualizar Activaciones ====================\cf0 \
+idx = 1;\
+input_espectro = X_val(:,:,:,idx);\
+capas = \{\cf2 'conv1'\cf0 ,\cf2 'relu1'\cf0 ,\cf2 'pool1'\cf0 ,\cf2 'conv2'\cf0 ,\cf2 'relu2'\cf0 ,\cf2 'pool2'\cf0 \};\
+\
+\cf4 for \cf0 i = 1:length(capas)\
+    act = activations(net, input_espectro, capas\{i\}, \cf2 'OutputAs'\cf0 , \cf2 'channels'\cf0 );\
+    act = squeeze(act);\
+    figure;\
+    imagesc(act);\
+    colormap(\cf2 'hot'\cf0 );\
+    colorbar;\
+    title([\cf2 'Activaciones - '\cf0 , capas\{i\}]);\
+    xlabel(\cf2 'Canal'\cf0 ); ylabel(\cf2 'Raman Shift'\cf0 );\
+\cf4 end\cf0 \
+\
+\cf3 %% =================== Visualizar red =============================\cf0 \
+figure;\
+plot(net);\
+\
+}
