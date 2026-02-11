@@ -1,0 +1,265 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red0\green128\blue19;\red167\green9\blue245;\red14\green0\blue255;
+}
+{\*\expandedcolortbl;;\csgenericrgb\c0\c50196\c7451;\csgenericrgb\c65490\c3529\c96078;\csgenericrgb\c5490\c0\c100000;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs20 \cf2 %% LDA Limpia y Explicativa para \cf0 \
+close \cf3 all\cf0 ;\
+clc;\
+clear \cf3 all\cf0 ;\
+\
+\cf2 %% Cargar datos\cf0 \
+ramanshift = load(\cf3 'Data_Ramman_shift.mat'\cf0 );\
+silicio    = load(\cf3 'silicio_limpio.mat'\cf0 );\
+oro        = load(\cf3 'gold_limpio_unido.mat'\cf0 );\
+mba        = load(\cf3 'mba_limpio.mat'\cf0 );\
+ecoli      = load(\cf3 "ecoli_limpio.mat"\cf0 );\
+oc         = load(\cf3 "oc_limpio.mat"\cf0 );\
+stx        = load(\cf3 "stx_limpio.mat"\cf0 );\
+\
+\
+\cf2 % Concatenar las matrices para el an\'e1lisis\cf0 \
+datos = [silicio.silicio_limpio, oro.gold_unido, mba.mba_final,\cf4 ...\cf0 \
+         ecoli.ecoli_final, oc.oc_final, stx.stx_final];\
+\
+\
+\cf2 % Crear etiquetas para las clases\cf0 \
+\cf2 % Clase 1: BOV_COV, Clase 2: ROTA, Clase 3: FEL_COV\cf0 \
+n_silicio = size(silicio.silicio_limpio, 2);\
+n_oro = size(oro.gold_unido, 2);\
+n_mba = size(mba.mba_final, 2);\
+n_ecoli = size(ecoli.ecoli_final, 2);\
+n_oc = size(oc.oc_final, 2);\
+n_stx= size(stx.stx_final,2);\
+\
+labels = [ones(1, n_silicio), 2*ones(1, n_oro), 3*ones(1, n_mba),\cf4 ...\cf0 \
+          4*ones(1, n_ecoli), 5*ones(1,n_oc), 6*ones(1, n_stx)];\
+\
+\cf2 % Transponer datos para que las muestras est\'e9n en filas\cf0 \
+datos_T = datos';\
+\
+\
+\
+\cf2 %% LDA\cf0 \
+\cf2 % Ajustar el modelo LDA\cf0 \
+Mdl = fitcdiscr(datos_T, labels);\
+\
+\cf2 % Obtener las medias de cada clase y la matriz de coeficientes\cf0 \
+classMeans = Mdl.Mu; \cf2 % Medias por clase\cf0 \
+coeff = Mdl.Coeffs; \cf2 % Coeficientes entre clases\cf0 \
+\
+\cf2 % Extraer las direcciones discriminantes (vectores propios del LDA)\cf0 \
+\cf2 % Usamos la comparaci\'f3n entre las clases (ejemplo: clase 1 vs. clase 2)\cf0 \
+W = coeff(1, 2).Linear; \cf2 % Vector discriminante entre clase 1 y 2\cf0 \
+\
+\cf2 % Proyectar los datos en las dimensiones LDA\cf0 \
+score_LDA = datos_T * W;\
+\
+\
+\
+\cf2 %% Visualizaci\'f3n de LDA\cf0 \
+figure;\
+hold \cf3 on\cf0 ;\
+scatter(score_LDA(labels == 1), zeros(sum(labels == 1), 1), \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.33 0.31 0.31],\cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 ,  \cf3 'Si'\cf0 );\
+scatter(score_LDA(labels == 2), zeros(sum(labels == 2), 1), \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.93 0.69 0.13], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'Au'\cf0 );\
+scatter(score_LDA(labels == 3), zeros(sum(labels == 3), 1), \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.6350 0.0780 0.1840],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 '4-MBA'\cf0 );\
+scatter(score_LDA(labels == 4), zeros(sum(labels == 4), 1)*2, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.40 0.54 0.23], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'E.coli'\cf0 );\
+scatter(score_LDA(labels == 5), zeros(sum(labels == 5), 1)*2, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.50 0.00 1.00],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'OC43'\cf0 );\
+scatter(score_LDA(labels == 6), zeros(sum(labels == 6), 1)*2, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[1.00 0.41 0.16],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'Stx2'\cf0 );\
+\
+\
+title(\cf3 'Projection LDA (1D)'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+xlabel(\cf3 'LDA1'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+ylabel(\cf3 'Projection'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+legend;\
+grid \cf3 on\cf0 ;\
+hold \cf3 off\cf0 ;\
+\cf2 %% LDA diverse projection\cf0 \
+\
+figure;\
+hold \cf3 on\cf0 ;\
+scatter(score_LDA(labels == 1), ones(sum(labels == 1), 1) * 1, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.33 0.31 0.31],\cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 ,  \cf3 'Si'\cf0 );\
+scatter(score_LDA(labels == 2), ones(sum(labels == 2), 1) * 2, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.93 0.69 0.13],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'Au'\cf0 );\
+scatter(score_LDA(labels == 3), ones(sum(labels == 3), 1) * 3, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.6350 0.0780 0.1840],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 '4-MBA'\cf0 );\
+scatter(score_LDA(labels == 4), ones(sum(labels == 4), 1) * 4, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.40 0.54 0.23],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'E.coli'\cf0 );\
+scatter(score_LDA(labels == 5), ones(sum(labels == 5), 1) * 5, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.50 0.00 1.00], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'OC 43'\cf0 );\
+scatter(score_LDA(labels == 6), ones(sum(labels == 6), 1) * 6, \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[1.00 0.41 0.16], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'Stx2'\cf0 );\
+ axis([-800 400 0.5 6.5])\
+\
+title(\cf3 'Projection LDA (1D)'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+xlabel(\cf3 'LDA1'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+ylabel(\cf3 'Class Projection'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+yticks(1:9); \cf2 % Para marcar los niveles en el eje Y\cf0 \
+yticklabels(\{\cf3 'Si'\cf0 , \cf3 'Au'\cf0 , \cf3 '4-MBA'\cf0 , \cf3 'E.coli'\cf0 , \cf3 'OC 43'\cf0 , \cf3 'Stx2'\cf0 \}); \cf2 % Etiquetas de clase\cf0 \
+legend;\
+grid \cf3 on\cf0 ;\
+hold \cf3 off\cf0 ;\
+\
+\
+\cf2 %% Visualizaci\'f3n en 2D (si m\'e1s dimensiones est\'e1n disponibles)\cf0 \
+W = Mdl.Coeffs(1,2).Linear; \cf2 % Extrae un solo discriminante\cf0 \
+\cf4 if \cf0 size(Mdl.Mu, 1) > 2\
+    W = [W, Mdl.Coeffs(2,3).Linear]; \cf2 % Agrega otro discriminante si hay m\'e1s clases\cf0 \
+\cf4 end\cf0 \
+\
+score_LDA = datos_T * W; \cf2 % Proyectar en 2D\cf0 \
+\
+\cf4 if \cf0 size(score_LDA, 2) >= 2\
+    figure;\
+    hold \cf3 on\cf0 ;\
+    scatter(score_LDA(labels == 1, 1), score_LDA(labels == 1, 2), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.33 0.31 0.31],\cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 ,  \cf3 'Si'\cf0 );\
+    scatter(score_LDA(labels == 2, 1), score_LDA(labels == 2, 2), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.93 0.69 0.13], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'Au'\cf0 );\
+    scatter(score_LDA(labels == 3, 1), score_LDA(labels == 3, 2), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.6350 0.0780 0.1840], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 '4-MBA'\cf0 );\
+    scatter(score_LDA(labels == 4, 1), score_LDA(labels == 4, 2), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.40 0.54 0.23],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'E.coli'\cf0 );\
+    scatter(score_LDA(labels == 5, 1), score_LDA(labels == 5, 2), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.50 0.00 1.00], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'OC43'\cf0 );\
+    scatter(score_LDA(labels == 6, 1), score_LDA(labels == 6, 2), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[1.00 0.41 0.16], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'Stx2'\cf0 );\
+   \
+    title(\cf3 'Projection LDA (2D)'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    xlabel(\cf3 'LDA1'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    ylabel(\cf3 'LDA2'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    legend;\
+    grid \cf3 on\cf0 ;\
+    hold \cf3 off\cf0 ;\
+\cf4 end\cf0 \
+\
+\
+\cf2 %% Obtener las direcciones discriminantes (vectores propios del LDA)\cf0 \
+\cf2 % Extraemos las tres primeras dimensiones del espacio LDA\cf0 \
+W = [Mdl.Coeffs(1,2).Linear, Mdl.Coeffs(2,3).Linear, Mdl.Coeffs(3,4).Linear];\
+\
+\cf2 % Proyectamos los datos en las tres primeras dimensiones de LDA\cf0 \
+score_LDA = datos_T * W; \
+\
+ \cf2 %Visualizaci\'f3n en 3D\cf0 \
+\cf4 if \cf0 size(score_LDA, 2) >= 3\
+    figure;\
+    hold \cf3 on\cf0 ;\
+    scatter3(score_LDA(labels == 1, 1), score_LDA(labels == 1, 2), score_LDA(labels == 1, 3), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.33 0.31 0.31],\cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 ,  \cf3 'Si'\cf0 );\
+    scatter3(score_LDA(labels == 2, 1), score_LDA(labels == 2, 2), score_LDA(labels == 2, 3), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.93 0.69 0.13],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'Au'\cf0 );\
+    scatter3(score_LDA(labels == 3, 1), score_LDA(labels == 3, 2), score_LDA(labels == 3, 3), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.6350 0.0780 0.1840],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 '4-MBA'\cf0 );\
+    scatter3(score_LDA(labels == 4, 1), score_LDA(labels == 4, 2), score_LDA(labels == 4, 3), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.40 0.54 0.23],\cf3 'LineWidth'\cf0 ,1.25, \cf3 'DisplayName'\cf0 , \cf3 'E.coli'\cf0 );\
+    scatter3(score_LDA(labels == 5, 1), score_LDA(labels == 5, 2), score_LDA(labels == 5, 3), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[0.50 0.00 1.00], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'OC43'\cf0 );\
+    scatter3(score_LDA(labels == 6, 1), score_LDA(labels == 6, 2), score_LDA(labels == 6, 3), \cf3 'o'\cf0 , \cf3 "MarkerFaceColor"\cf0 ,\cf3 "none"\cf0 ,\cf3 "MarkerEdgeColor"\cf0 ,[1.00 0.41 0.16], \cf3 'LineWidth'\cf0 ,1.25,\cf3 'DisplayName'\cf0 , \cf3 'Stx2'\cf0 );\
+\
+    \
+    title(\cf3 'Projection LDA (3D)'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    xlabel(\cf3 'LDA1'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    ylabel(\cf3 'LDA2'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    zlabel(\cf3 'LDA3'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+    legend;\
+    grid \cf3 on\cf0 ;\
+    view(3); \cf2 % Vista 3D\cf0 \
+    hold \cf3 off\cf0 ;\
+\cf4 end\cf0 \
+\cf2 %% DE AQUI EN ADELANTE SE RENOMBRA LAS ETIQUETAS PARA TENER UN GRAFICO ENCERRADO LOS DATOS\cf0 \
+\
+\cf2 % Crear etiquetas para las clases\cf0 \
+num_clases = 6;\
+n_samples = cellfun(@(x) size(x, 2), \{silicio.silicio_limpio, oro.gold_unido, \cf4 ...\cf0 \
+    mba.mba_final,ecoli.ecoli_final,oc.oc_final,stx.stx_final\});\
+\
+labels = repelem(1:num_clases, n_samples);\
+\
+\cf2 % Transponer datos para LDA\cf0 \
+datos_T = datos';\
+\
+\
+\
+\
+\cf2 %% Aplicar LDA\cf0 \
+Mdl = fitcdiscr(datos_T, labels, \cf3 'DiscrimType'\cf0 , \cf3 'linear'\cf0 );\
+\
+\cf2 % Varianza explicada (criterio de Fisher)\cf0 \
+eig_vals = Mdl.Sigma; \cf2 % Valores propios de la matriz de covarianza\cf0 \
+var_explicada = eig_vals / sum(eig_vals);\
+disp(\cf3 'Varianza explicada por cada componente de LDA:'\cf0 )\
+disp(var_explicada)\
+\
+\cf2 % Proyecci\'f3n de los datos en las dimensiones LDA\cf0 \
+score_LDA = datos_T * Mdl.Coeffs(1,2).Linear;\
+\
+\cf2 %% Visualizaci\'f3n de la proyecci\'f3n 1D con curvas gaussianas\cf0 \
+figure;\
+hold \cf3 on\cf0 ;\
+\cf2 %colores = lines(num_clases);\cf0 \
+\
+colores= [ 0.33 0.31 0.31 ; 0.93 0.69 0.13; 0.6350 0.0780 0.1840;\cf4 ...\cf0 \
+           0.40 0.54 0.23 ; 0.50 0.00 1.00; 1.00 0.41 0.16;\cf4 ...\cf0 \
+           1.00 0.00 0.00 ; 0.00 1.00 1.00; 0.00 0.00 1.00];\
+\
+\cf4 for \cf0 i = 1:num_clases\
+    datos_clase = score_LDA(labels == i);\
+    histogram(datos_clase, \cf3 'Normalization'\cf0 , \cf3 'pdf'\cf0 , \cf3 'EdgeColor'\cf0 , \cf3 'none'\cf0 , \cf3 'FaceAlpha'\cf0 , 0.5, \cf3 'FaceColor'\cf0 , colores(i, :));\
+\
+    \cf2 % Ajustar distribuci\'f3n normal a los datos proyectados\cf0 \
+    pd = fitdist(datos_clase, \cf3 'Normal'\cf0 );\
+    x_vals = linspace(min(score_LDA), max(score_LDA), 100);\
+    y_vals = pdf(pd, x_vals);\
+    plot(x_vals, y_vals, \cf3 'Color'\cf0 , colores(i, :), \cf3 'LineWidth'\cf0 , 2, \cf3 'DisplayName'\cf0 , [\cf3 'Class '\cf0 , num2str(i)]);\
+\cf4 end\cf0 \
+\
+title(\cf3 '1D LDA Projection with Gaussian Distributions'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+xlabel(\cf3 'LDA1'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+ylabel(\cf3 'Probability Density'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+legend(\cf3 'Si'\cf0 ,\cf3 'Class 1'\cf0 ,\cf3 'Au'\cf0 ,\cf3 'Class 2'\cf0 ,\cf3 '4-MBA'\cf0 ,\cf3 'Class 3'\cf0 ,\cf4 ...\cf0 \
+       \cf3 'E coli'\cf0 ,\cf3 'Class 4'\cf0 ,\cf3 'OC43'\cf0 ,\cf3 'Class 5'\cf0 ,\cf3 'Stx'\cf0 ,\cf3 'Class 6'\cf0 );\
+grid \cf3 on\cf0 ;\
+hold \cf3 off\cf0 ;\
+\
+\cf2 %%\cf0 \
+\cf2 % Obtener la varianza explicada\cf0 \
+explained_variance = Mdl.Sigma; \cf2 % Matriz de covarianza dentro de clases\cf0 \
+[~, D] = eig(Mdl.BetweenSigma, Mdl.Sigma); \cf2 % Valores propios de la relaci\'f3n entre clases\cf0 \
+\
+\cf2 % Ordenar valores propios en orden descendente\cf0 \
+eig_values = diag(D);\
+[sorted_eig_values, idx] = sort(eig_values, \cf3 'descend'\cf0 );\
+\
+\cf2 % Calcular varianza explicada\cf0 \
+explained_variance_ratio = sorted_eig_values / sum(sorted_eig_values);\
+\
+\cf2 % Mostrar varianza explicada\cf0 \
+disp(\cf3 'Varianza explicada por cada componente de LDA:'\cf0 );\
+disp(explained_variance_ratio);\
+\
+\
+\cf2 %%\cf0 \
+\cf2 % Proyectamos los datos en las dos primeras dimensiones del espacio LDA\cf0 \
+W = [Mdl.Coeffs(1,2).Linear, Mdl.Coeffs(2,3).Linear]; \cf2 % Tomamos las dos primeras direcciones\cf0 \
+score_LDA = datos_T * W; \
+\
+\cf2 % Visualizaci\'f3n con distribuci\'f3n gaussiana\cf0 \
+figure;\
+hold \cf3 on\cf0 ;\
+\
+colors = \{[0.33 0.31 0.31], [0.93 0.69 0.13], [0.6350 0.0780 0.1840], \cf4 ...\cf0 \
+          [0.40 0.54 0.23], [0.50 0.00 1.00], [1.00 0.41 0.16], \cf4 ...\cf0 \
+          [1.00 0.00 0.00], [0.00 1.00 1.00], [0.00 0.00 1.00]\};\
+\
+labels_text = \{\cf3 'Si'\cf0 , \cf3 'Au'\cf0 , \cf3 '4-MBA'\cf0 , \cf3 'E.coli'\cf0 , \cf3 'OC43'\cf0 , \cf3 'Stx2'\cf0 \};\
+\
+\cf4 for \cf0 i = 1:6\
+    idx = labels == i;\
+    scatter(score_LDA(idx,1), score_LDA(idx,2), \cf3 'o'\cf0 , \cf3 'MarkerEdgeColor'\cf0 , colors\{i\},\cf3 'DisplayName'\cf0 , labels_text\{i\}, \cf3 'MarkerEdgeAlpha'\cf0 ,0.25,\cf3 'LineWidth'\cf0 ,1.5);\cf2 %\cf0 \
+\
+    \cf2 % Ajustar distribuci\'f3n gaussiana a cada clase\cf0 \
+    mu = mean(score_LDA(idx,:)); \cf2 % Media\cf0 \
+    sigma = cov(score_LDA(idx,:)); \cf2 % Matriz de covarianza\cf0 \
+    error_ellipse(sigma, mu,\cf3 'conf'\cf0 , 0.85, \cf3 'style'\cf0 , \cf3 '-'\cf0 , \cf3 'color'\cf0 , colors\{i\});\cf2 % (('Class ', num2str(i)),('Daata ', num2str(i)))     ['Class ', num2str(i)]\cf0 \
+\cf4 end\cf0 \
+\
+title(\cf3 '2D distribution with Gaussian curves (LDA1 vs LDA2)'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+xlabel(\cf3 'LDA1'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+ylabel(\cf3 'LDA2'\cf0 , \cf3 'Interpreter'\cf0 , \cf3 'latex'\cf0 );\
+legend(\cf3 'Si'\cf0 ,\cf3 'Class 1'\cf0 ,\cf3 'Au'\cf0 ,\cf3 'Class 2'\cf0 ,\cf3 '4-MBA'\cf0 ,\cf3 'Class 3'\cf0 ,\cf4 ...\cf0 \
+       \cf3 'E.coli'\cf0 ,\cf3 'Class 4'\cf0 ,\cf3 'OC43'\cf0 ,\cf3 'Class 5'\cf0 ,\cf3 'Stx2'\cf0 ,\cf3 'Class 6'\cf0 );\
+grid \cf3 on\cf0 ;\
+hold \cf3 off\cf0 ;\
+\
+\
+\
+}

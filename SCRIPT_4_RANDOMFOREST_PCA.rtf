@@ -1,0 +1,149 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red167\green9\blue245;\red0\green128\blue19;\red14\green0\blue255;
+}
+{\*\expandedcolortbl;;\csgenericrgb\c65490\c3529\c96078;\csgenericrgb\c0\c50196\c7451;\csgenericrgb\c5490\c0\c100000;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs20 \cf0 close \cf2 all\cf0 ;\
+clc;\
+clear;\
+\
+\cf3 %% Semilla para reproducibilidad\cf0 \
+rng(42);\
+\
+\cf3 %% Cargar datos\cf0 \
+ramanshift = load(\cf2 'Data_Ramman_shift.mat'\cf0 );\
+silicio    = load(\cf2 'silicio_limpio.mat'\cf0 );\
+oro        = load(\cf2 'gold_limpio_unido.mat'\cf0 );\
+mba        = load(\cf2 'mba_limpio.mat'\cf0 );\
+ecoli      = load(\cf2 "ecoli_limpio.mat"\cf0 );\
+oc         = load(\cf2 "oc_limpio.mat"\cf0 );\
+stx        = load(\cf2 "stx_limpio.mat"\cf0 );\
+\
+\cf3 % Concatenar matrices\cf0 \
+datos = [silicio.silicio_limpio, oro.gold_unido, mba.mba_final,\cf4 ...\cf0 \
+         ecoli.ecoli_final, oc.oc_final, stx.stx_final];\
+\
+etiquetas = [repmat(1, 1, size(silicio.silicio_limpio, 2)), \cf4 ...\cf0 \
+             repmat(2, 1, size(oro.gold_unido, 2)), \cf4 ...\cf0 \
+             repmat(3, 1, size(mba.mba_final, 2)), \cf4 ...\cf0 \
+             repmat(4, 1, size(ecoli.ecoli_final, 2)), \cf4 ...\cf0 \
+             repmat(5, 1, size(oc.oc_final, 2)), \cf4 ...\cf0 \
+             repmat(6, 1, size(stx.stx_final, 2)) ];\
+\
+datos_T = datos';\
+datos_std = zscore(datos_T);\
+\
+\cf3 %% PCA\cf0 \
+[coeff, score, ~, ~, explained] = pca(datos_std);\
+\
+\cf3 % Calcular varianza acumulada y elegir componentes que expliquen >95%\cf0 \
+var_acumulada = cumsum(explained);\
+num_componentes = find(var_acumulada >= 95, 1);\
+fprintf(\cf2 'N\'famero de componentes para explicar >95%% varianza: %d\\n'\cf0 , num_componentes);\
+\
+datos_pca = score(:, 1:num_componentes);\
+\
+\cf3 %% Divisi\'f3n de datos (estratificada)\cf0 \
+cv = cvpartition(etiquetas, \cf2 'HoldOut'\cf0 , 0.3);\
+\
+X_train = datos_pca(training(cv), :);\
+X_test = datos_pca(test(cv), :);\
+y_train = etiquetas(training(cv));\
+y_test = etiquetas(test(cv));\
+\
+\cf3 %% Entrenamiento - Random Forest\cf0 \
+numTrees = 100;\
+modelo_rf = TreeBagger(numTrees, X_train, y_train, \cf2 'Method'\cf0 , \cf2 'classification'\cf0 , \cf4 ...\cf0 \
+    \cf2 'OOBPrediction'\cf0 , \cf2 'On'\cf0 , \cf2 'OOBPredictorImportance'\cf0 , \cf2 'On'\cf0 );\
+\
+\cf3 % Predicciones\cf0 \
+y_pred = str2double(predict(modelo_rf, X_test));\
+precision = sum(y_pred == y_test) / length(y_test) * 100;\
+fprintf(\cf2 'Precisi\'f3n (Random Forest): %.2f%%\\n'\cf0 , precision);\
+\
+\cf3 %% Matriz de confusi\'f3n\cf0 \
+figure;\
+confusionchart(y_test, y_pred, \cf2 'RowSummary'\cf0 ,\cf2 'row-normalized'\cf0 , \cf2 'ColumnSummary'\cf0 ,\cf2 'column-normalized'\cf0 );\
+title(\cf2 'Confusion Matrix - Random Forest (PCA)'\cf0 );\
+\
+\cf3 %% M\'e9tricas adicionales por clase\cf0 \
+\cf3 %% M\'e9tricas adicionales por clase\cf0 \
+classes = unique(y_test);\
+fprintf(\cf2 '\\n--- M\'e9tricas por clase ---\\n'\cf0 );\
+\cf4 for \cf0 i = 1:length(classes)\
+    clase = classes(i);\
+    \
+    \cf3 % Verdaderos positivos (TP): predice y es realmente esa clase\cf0 \
+    TP = sum((y_pred == clase) & (y_test == clase));\
+    \
+    \cf3 % Falsos negativos (FN): no predice la clase, pero era esa clase\cf0 \
+    FN = sum((y_pred ~= clase) & (y_test == clase));\
+    \
+    \cf3 % Falsos positivos (FP): predice la clase, pero no era\cf0 \
+    FP = sum((y_pred == clase) & (y_test ~= clase));\
+    \
+    \cf3 % Precisi\'f3n, recall, F1 (con protecci\'f3n contra divisi\'f3n por cero)\cf0 \
+    \cf4 if \cf0 (TP + FP) == 0\
+        precision_cls = 0;\
+    \cf4 else\cf0 \
+        precision_cls = TP / (TP + FP);\
+    \cf4 end\cf0 \
+\
+    \cf4 if \cf0 (TP + FN) == 0\
+        recall = 0;\
+    \cf4 else\cf0 \
+        recall = TP / (TP + FN);\
+    \cf4 end\cf0 \
+\
+    \cf4 if \cf0 (precision_cls + recall) == 0\
+        f1 = 0;\
+    \cf4 else\cf0 \
+        f1 = 2 * (precision_cls * recall) / (precision_cls + recall);\
+    \cf4 end\cf0 \
+\
+    fprintf(\cf2 'Clase %d: Precision = %.2f%%, Recall = %.2f%%, F1 = %.2f%%\\n'\cf0 , \cf4 ...\cf0 \
+        clase, precision_cls * 100, recall * 100, f1 * 100);\
+\cf4 end\cf0 \
+\
+\
+\cf3 %% Importancia de caracter\'edsticas (componentes PCA)\cf0 \
+figure;\
+bar(modelo_rf.OOBPermutedPredictorDeltaError);\
+xlabel(\cf2 'Componentes Principales'\cf0 );\
+ylabel(\cf2 'Importancia OOB (%)'\cf0 );\
+title(\cf2 'Importancia de los Componentes PCA en el Random Forest'\cf0 );\
+grid \cf2 on\cf0 ;\
+\
+\cf3 %% Error de predicci\'f3n\cf0 \
+errors = y_test - y_pred;\
+figure;\
+histogram(errors);\
+xlabel(\cf2 'Prediction Error'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+ylabel(\cf2 'Frequency'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+title(\cf2 'Error Distribution Random Forest - Random Forest'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+\
+\cf3 %% Visualizaci\'f3n comparativa: Datos reales vs predichos\cf0 \
+figure;\
+scatter(1:length(y_test), y_test, 100,\cf2 'bo'\cf0 , \cf2 'DisplayName'\cf0 , \cf2 'Real'\cf0 );\
+hold \cf2 on\cf0 ;\
+scatter(1:length(y_pred), y_pred, \cf2 'rx'\cf0 , \cf2 'DisplayName'\cf0 , \cf2 'Predicho'\cf0 );\
+legend;\
+xlabel(\cf2 'Sample Index'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+ylabel(\cf2 'Class'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+title(\cf2 'Comparison: Real data Vs Predicted Data'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+grid \cf2 on\cf0 ;\
+axis([-100 3000 0.5 6.5])\
+\cf3 % Personalizar etiquetas del eje Y\cf0 \
+classes = unique([y_test(:); y_pred(:)]); \cf3 % Obtener clases \'fanicas\cf0 \
+yticks(classes);                          \cf3 % Posiciones en Y\cf0 \
+yticklabels(\cf2 "Clase " \cf0 + string(classes)); \cf3 % Etiquetas con "Clase 1", etc.\cf0 \
+\cf3 %% Ver \'e1rbol individual\cf0 \
+figure;\
+view(modelo_rf.Trees\{1\}, \cf2 'Mode'\cf0 , \cf2 'graph'\cf0 );\
+title(\cf2 'Ejemplo de \'c1rbol en el Random Forest'\cf0 );\
+\
+}

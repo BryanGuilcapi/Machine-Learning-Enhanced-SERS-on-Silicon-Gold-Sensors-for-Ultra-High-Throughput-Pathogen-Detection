@@ -1,0 +1,175 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2867
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red167\green9\blue245;\red0\green128\blue19;\red14\green0\blue255;
+}
+{\*\expandedcolortbl;;\csgenericrgb\c65490\c3529\c96078;\csgenericrgb\c0\c50196\c7451;\csgenericrgb\c5490\c0\c100000;
+}
+\paperw11900\paperh16840\margl1440\margr1440\vieww11520\viewh8400\viewkind0
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs20 \cf0 close \cf2 all\cf0 ; \
+clc; \
+clear;\
+\
+\cf3 %% Cargar datos\cf0 \
+silicio = load(\cf2 'silicio_limpio.mat'\cf0 );\
+oro     = load(\cf2 'gold_limpio_unido.mat'\cf0 );\
+mba     = load(\cf2 'mba_limpio.mat'\cf0 );\
+ecoli   = load(\cf2 'ecoli_limpio.mat'\cf0 );\
+oc      = load(\cf2 'oc_limpio.mat'\cf0 );\
+stx     = load(\cf2 'stx_limpio.mat'\cf0 );\
+\
+\cf3 % Concatenar datos\cf0 \
+datos = [silicio.silicio_limpio, oro.gold_unido, mba.mba_final,\cf4 ...\cf0 \
+         ecoli.ecoli_final, oc.oc_final, stx.stx_final];\
+\
+\cf3 % Etiquetas\cf0 \
+labels = [ones(1, size(silicio.silicio_limpio, 2)), \cf4 ...\cf0 \
+          2*ones(1, size(oro.gold_unido, 2)), \cf4 ...\cf0 \
+          3*ones(1, size(mba.mba_final, 2)), \cf4 ...\cf0 \
+          4*ones(1, size(ecoli.ecoli_final, 2)), \cf4 ...\cf0 \
+          5*ones(1, size(oc.oc_final, 2)), \cf4 ...\cf0 \
+          6*ones(1, size(stx.stx_final, 2))];\
+\
+\cf3 % Transponer\cf0 \
+datos_T = datos';\
+datos=datos';\
+labels = labels';\
+\
+\cf3 %% 2. Divisi\'f3n Estratificada en Entrenamiento y Prueba\cf0 \
+\cf3 % Es crucial realizar la divisi\'f3n ANTES de cualquier transformaci\'f3n que dependa de todo el dataset.\cf0 \
+cv = cvpartition(labels, \cf2 'HoldOut'\cf0 , 0.3);\
+train_indices = training(cv);\
+test_indices = test(cv);\
+\
+XTrain_raw = datos(train_indices, :);\
+YTrain = labels(train_indices);\
+XTest_raw = datos(test_indices, :);\
+YTest = labels(test_indices);\
+\
+\cf3 %% 3. Aplicar LDA SOLO al Conjunto de Entrenamiento y LUEGO Proyectar el Conjunto de Prueba\cf0 \
+\cf3 % Es fundamental que el modelo LDA se ajuste \'daNICAMENTE con los datos de entrenamiento\cf0 \
+ldaModel = fitcdiscr(XTrain_raw, YTrain);\
+\
+\cf3 % Obtener la matriz de transformaci\'f3n W del modelo LDA\cf0 \
+W = ldaModel.Coeffs(1,2).Linear; \cf3 % Usar los coeficientes lineales directamente\cf0 \
+\
+\cf3 % Proyectar los datos de entrenamiento y prueba utilizando la matriz W\cf0 \
+XTrain = XTrain_raw * W;\
+XTest  = XTest_raw * W;\
+\
+\cf3 % Reducir la dimensionalidad a 5 (si es posible con 6 clases, ser\'e1 a lo sumo 5 dimensiones)\cf0 \
+\cf4 if \cf0 size(XTrain, 2) > 5\
+    XTrain = XTrain(:, 1:5);\
+    XTest = XTest(:, 1:5);\
+\cf4 end\cf0 \
+\
+\cf3 %% 4. Estandarizaci\'f3n (Aplicar por separado a entrenamiento y prueba)\cf0 \
+\cf3 % Calcular la media y desviaci\'f3n est\'e1ndar SOLO del conjunto de entrenamiento\cf0 \
+muTrain = mean(XTrain);\
+sigmaTrain = std(XTrain);\
+\
+\cf3 % Estandarizar el conjunto de entrenamiento\cf0 \
+XTrain_scaled = (XTrain - muTrain) ./ sigmaTrain;\
+\
+\cf3 % Estandarizar el conjunto de prueba USANDO la media y desviaci\'f3n est\'e1ndar del entrenamiento\cf0 \
+XTest_scaled  = (XTest - muTrain) ./ sigmaTrain;\
+\
+\cf3 %% 5. Entrenar Random Forest con los Datos Transformados y Estandarizados\cf0 \
+numTrees = 100;\
+rfModel = TreeBagger(numTrees, XTrain_scaled, YTrain, \cf4 ...\cf0 \
+    \cf2 'Method'\cf0 , \cf2 'classification'\cf0 , \cf4 ...\cf0 \
+    \cf2 'OOBPredictorImportance'\cf0 , \cf2 'on'\cf0 , \cf4 ...\cf0 \
+    \cf2 'OOBPrediction'\cf0 , \cf2 'on'\cf0 );\
+\
+\cf3 %% 6. Predicci\'f3n en el Conjunto de Prueba (Usando los datos escalados)\cf0 \
+[YPred_str, scores] = predict(rfModel, XTest_scaled);\
+YPred = str2double(YPred_str);\
+\
+\cf3 %% 7. Evaluaci\'f3n del Modelo\cf0 \
+accuracy = mean(YPred == YTest) * 100;\
+fprintf(\cf2 'Precisi\'f3n total Random Forest: %.2f%%\\n'\cf0 , accuracy);\
+\
+\cf3 %% 8. Matriz de Confusi\'f3n\cf0 \
+figure;\
+confusionchart(YTest, YPred, \cf4 ...\cf0 \
+    \cf2 'RowSummary'\cf0 ,\cf2 'row-normalized'\cf0 , \cf4 ...\cf0 \
+    \cf2 'ColumnSummary'\cf0 ,\cf2 'column-normalized'\cf0 );\
+title(\cf2 'Confusinon Matrix- Random Forest (LDA)'\cf0 );\
+\
+\cf3 %% 9. M\'e9tricas por Clase\cf0 \
+confMat = confusionmat(YTest, YPred);\
+TP = diag(confMat);\
+FP = sum(confMat,1)' - TP;\
+FN = sum(confMat,2) - TP;\
+precision_cls = TP ./ (TP + FP);\
+recall_cls = TP ./ (TP + FN);\
+F1_cls = 2 * (precision_cls .* recall_cls) ./ (precision_cls + recall_cls);\
+precision_cls(isnan(precision_cls)) = 0;\
+recall_cls(isnan(recall_cls)) = 0;\
+F1_cls(isnan(F1_cls)) = 0;\
+fprintf(\cf2 'Precisi\'f3n por clase:\\n'\cf0 ); disp(precision_cls');\
+fprintf(\cf2 'Recall por clase:\\n'\cf0 );    disp(recall_cls');\
+fprintf(\cf2 'F1-score por clase:\\n'\cf0 );  disp(F1_cls');\
+\
+\cf3 %% 10. Distribuci\'f3n de Errores\cf0 \
+figure;\
+histogram(YTest - YPred);\
+xlabel(\cf2 'Prediction Error'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+ylabel(\cf2 'Frequency'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+title(\cf2 'Error Distribution Random Forest - Random Forest'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+\
+\cf3 %% 11. Visualizar \'c1rbol de Ejemplo\cf0 \
+figure;\
+view(rfModel.Trees\{1\}, \cf2 'Mode'\cf0 , \cf2 'graph'\cf0 );\
+\
+\cf3 %% 12. Real vs. Predicci\'f3n\cf0 \
+figure;\
+scatter(1:length(YTest), YTest, 100,\cf2 'bo'\cf0 , \cf2 'DisplayName'\cf0 , \cf2 'Real'\cf0 );\
+hold \cf2 on\cf0 ;\
+scatter(1:length(YPred), YPred, 50, \cf2 'rx'\cf0 , \cf2 'DisplayName'\cf0 , \cf2 'Predicted'\cf0 );\
+xlabel(\cf2 'Sample Index'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+ylabel(\cf2 'Class'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+legend; grid \cf2 on\cf0 ;\
+title(\cf2 'Comparison: Real data Vs Predicted Data'\cf0 , \cf2 'Interpreter'\cf0 , \cf2 'latex'\cf0 );\
+axis([-100 3000 0.5 6.5])\
+\
+\cf3 % Personalizar etiquetas del eje Y\cf0 \
+classes = unique([YTest(:); YPred(:)]); \cf3 % Obtener clases \'fanicas\cf0 \
+yticks(classes);                          \cf3 % Posiciones en Y\cf0 \
+yticklabels(\cf2 "Clase " \cf0 + string(classes)); \cf3 % Etiquetas con "Clase 1", etc.\cf0 \
+\
+\cf3 %% 13. Importancia de Caracter\'edsticas (Ahora aplicado a las componentes LDA)\cf0 \
+figure;\
+bar(rfModel.OOBPermutedPredictorDeltaError);\
+xlabel(\cf2 'Componentes LDA'\cf0 );\
+ylabel(\cf2 'Importancia'\cf0 );\
+title(\cf2 'Importancia de Variables (Componentes LDA)'\cf0 );\
+\
+\cf3 %% 14. ROC y AUC\cf0 \
+classes = unique(YTest);\
+figure; hold \cf2 on\cf0 ;\
+colors = lines(length(classes));\
+\cf4 for \cf0 i = 1:length(classes)\
+    [Xroc, Yroc, ~, AUC] = perfcurve(YTest, scores(:,i), classes(i));\
+    plot(Xroc, Yroc, \cf2 'LineWidth'\cf0 , 1.5, \cf2 'Color'\cf0 , colors(i,:), \cf4 ...\cf0 \
+        \cf2 'DisplayName'\cf0 , sprintf(\cf2 'Clase %d (AUC %.2f)'\cf0 , classes(i), AUC));\
+\cf4 end\cf0 \
+xlabel(\cf2 'FPR'\cf0 ); ylabel(\cf2 'TPR'\cf0 );\
+title(\cf2 'Curvas ROC por Clase'\cf0 );\
+legend(\cf2 'Location'\cf0 ,\cf2 'Best'\cf0 ); grid \cf2 on\cf0 ;\
+\
+\cf3 %% 15. Distribuci\'f3n de Clases\cf0 \
+disp(\cf2 'Distribuci\'f3n de clases en entrenamiento:'\cf0 );\
+tabulate(YTrain)\
+disp(\cf2 'Distribuci\'f3n de clases en test:'\cf0 );\
+tabulate(YTest)\
+\
+\cf3 %% 16. Visualizaci\'f3n de la Proyecci\'f3n LDA (Solo en el conjunto de entrenamiento)\cf0 \
+\cf3 % Es m\'e1s informativo visualizar la transformaci\'f3n LDA en el espacio de entrenamiento\cf0 \
+\cf4 if \cf0 size(XTrain_scaled, 2) >= 2\
+    figure;\
+    gscatter(XTrain_scaled(:,1), XTrain_scaled(:,2), YTrain);\
+    title(\cf2 'Proyecci\'f3n LDA (2 primeras componentes) - Entrenamiento'\cf0 );\
+\cf4 end\cf0 \
+}
